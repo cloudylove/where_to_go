@@ -1,24 +1,47 @@
-//腳踏車
-async function bike(){
-    //測試用
-    let latlng = {
-      lat: 22.6688753,
-      lng: 120.3005317
-    }
-    let radius = 800;
-    //車站 & 各站車輛 api
+// map
+var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '© OpenStreetMap'
+});
+var map = L.map('map', { layers: [osm] });
+
+map.locate({setView: true, maxZoom: 20}); // 偵測定位
+map.on('locationfound', onLocationFound); // 定位成功
+map.on('locationerror', onLocationError); // 定位失敗
+
+// 定位成功
+async function onLocationFound(e) {
+  // let latlng = { lat: 22.6688753, lng: 120.3005317 }; // Kaohsiung Arena
+  let latlng = e.latlng; // 取得定位
+  let radius = 800; // 步行範圍
+  L.circle(latlng, radius).addTo(map); // 標示步行 10min 範圍方圓 800m
+
+  let token = await GetAuthorizationHeader(); // 取得 token
+  // call function
+  bike(token); // 自行車
+}
+
+// 定位失敗訊息
+function onLocationError(e) {
+  alert(e.message);
+}
+
+
+
+// 找自行車
+async function bike(token){
+    // 車站 & 各站車輛 api
     let stn_api = 'https://tdx.transportdata.tw/api/basic/v2/Bike/Station/City/Kaohsiung?%24format=JSON';
     let bike_api = 'https://tdx.transportdata.tw/api/basic/v2/Bike/Availability/City/Kaohsiung?%24format=JSON';
-    //呼叫 TDX api
-    let token = await GetAuthorizationHeader();
+    // 呼叫 TDX api
     let stn_data = await GetApiResponse(stn_api, token);
     let bike_data = await GetApiResponse(bike_api, token);
-    //宣告物件存值方便取用
+    // 宣告物件存值方便取用
     let stn_obj;
     let bike_obj;
-    let bikeStopArr = [];
+    let bikeStopArr = []; // 存自行車站 marker
     
-    //處理每個車站的資料
+    // 處理每個車站的資料
     stn_data.forEach(s_item => {
       stn_obj = {
         PositionLon: s_item.StationPosition.PositionLon, //經度
@@ -26,24 +49,23 @@ async function bike(){
         StationName: s_item.StationName.Zh_tw, //站名
         StationAddress: s_item.StationAddress.Zh_tw, //地址
         BikesCapacity: s_item.BikesCapacity, //車位總數
-         }
-      //處理各站車輛資料
+      }
+      // 處理各站車輛資料
       bike_data.filter((b_item, index, array) => {
-        //兩組資料透過 StationUID 連結
+        // 兩組資料透過 StationUID 連結
         if(b_item.StationUID === s_item.StationUID){
-          //console.log(`${b_item.StationUID} yes`);
+          // console.log(`${b_item.StationUID} yes`);
           bike_obj = {
             "Rent": b_item.AvailableRentBikes, //可借車輛數
             "Return": b_item.AvailableReturnBikes, //可還車位數
             "General": b_item.AvailableRentBikesDetail.GeneralBikes, //2.0 車輛數
             "Electric": b_item.AvailableRentBikesDetail.ElectricBikes, //2.0E 車輛數
             "ServiceStatus": b_item.ServiceStatus //服務狀態[0:'停止營運',1:'正常營運',2:'暫停營運']
-     
           }
           // console.log(stn_obj);
           // console.log(bike_obj);
           
-          //車站標記 icon & popup 內容
+          // 車站標記 icon & popup 內容
           let str = `${stn_obj.StationName} <br>`;
           str += `${stn_obj.StationAddress} <br>`
           str += `共可容納${stn_obj.BikesCapacity}台車 <br>`
@@ -74,32 +96,17 @@ async function bike(){
             green.options.icon.options.icon = "fa-solid fa-bolt";
           }
           
-          green.bindPopup(`${str}`).openPopup();
-          bikeStopArr.push(green);
+          green.bindPopup(`${str}`).openPopup(); // popup
+          bikeStopArr.push(green); // 收集自行車站 marker
         }
       });
     });
     // 群集
     let bikeStops = L.markerClusterGroup();
-    bikeStopArr.forEach(item => bikeStops.addLayer(item));  // 把marker加入 L.markerClusterGroup中
-    
-    //map
-    var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap'
-    });
-    var map = L.map('map', {
-      center: [22.6314804,120.3017429],
-      zoom: 10,
-      layers: [osm,bikeStops] 
-    });
-    var layerControl = L.control.layers(overlayMaps).addTo(map);
-    layerControl.addOverlay(bikeStops, "bikeStops"); 
+    bikeStopArr.forEach(item => bikeStops.addLayer(item).addTo(map));  // 把自行車站加入 L.markerClusterGroup中
   }
   
   
-  //call function
-  bike();
   
   
   //驗證 TDX 金鑰
