@@ -39,7 +39,13 @@ async function bike(token){
     // 宣告物件存值方便取用
     let stn_obj;
     let bike_obj;
-    let bikeStopArr = []; // 存自行車站 marker
+    let landmark = L.layerGroup(); // 存最後點擊 marker
+    // 自行車站群集
+    let bikeStops = L.markerClusterGroup({
+      maxClusterRadius: function (zoom) { 
+          return (zoom <= 14) ? 80 : 1; // 縮放程度14以下才以80px為單位做群集
+      }
+    });
     
     // 處理每個車站的資料
     stn_data.forEach(s_item => {
@@ -66,7 +72,7 @@ async function bike(token){
           // console.log(bike_obj);
           
           // 車站標記 icon & popup 內容
-          let str = `${stn_obj.StationName} <br>`;
+          let str = `${stn_obj.StationName} <br>`
           str += `${stn_obj.StationAddress} <br>`
           str += `共可容納${stn_obj.BikesCapacity}台車 <br>`
           str += `可借:${bike_obj.Rent} 可還:${bike_obj.Return} <br>`
@@ -87,23 +93,33 @@ async function bike(token){
             str += `暫停營運`;
           }
           else if (bike_obj.Rent < 1) { //無車可借上橘底
-            green.options.icon.options.markerColor = "orange"
+            green.options.icon.options.markerColor = "orange";
           }
           else if (bike_obj.Return < 1) { //無車可還上紅底
-            green.options.icon.options.markerColor = "red"
+            green.options.icon.options.markerColor = "red";
           }
           if(bike_obj.Electric > 0){ //有電輔車才標記閃電
             green.options.icon.options.icon = "fa-solid fa-bolt";
           }
           
           green.bindPopup(`${str}`).openPopup(); // popup
-          bikeStopArr.push(green); // 收集自行車站 marker
+          bikeStops.addLayer(green).addTo(map) // 把自行車站加入群集
+
+          // 點擊自行車站，切換單獨顯示or融入群集
+          green.on('click', function(e) {
+            if(landmark.getLayers().length > 0) {
+              landmark.eachLayer(function(layer) {
+                landmark.removeLayer(layer); // 從單獨顯示圖層移除 marker
+                bikeStops.addLayer(layer).addTo(map); // 回歸群集
+              });
+            }
+            bikeStops.removeLayer(e.target); // 從群集移除點擊 marker
+            landmark.addLayer(e.target).addTo(map); // 單獨顯示
+            e.target.openPopup(); // 打開彈出視窗
+          });
         }
       });
     });
-    // 群集
-    let bikeStops = L.markerClusterGroup();
-    bikeStopArr.forEach(item => bikeStops.addLayer(item).addTo(map));  // 把自行車站加入 L.markerClusterGroup中
   }
   
   
