@@ -1,3 +1,10 @@
+// import
+import * as CONFIG from "./config.js";
+
+
+
+
+
 // map
 var osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
@@ -489,8 +496,8 @@ function convertSecondsToHours(sec) {
   async function GetAuthorizationHeader() {    
       const parameter = {
           grant_type:"client_credentials",
-          client_id: "XXXXXXXXXX-XXXXXXXX-XXXX-XXXX",
-          client_secret: "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+          client_id: CONFIG.CLIENT_ID,
+          client_secret: CONFIG.CLIENT_SECRET
       }; 
       
       let auth_url = "https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token";
