@@ -14,7 +14,7 @@ async function onLocationFound(e) {
   // let latlng = { lat: 22.6688753, lng: 120.3005317 }; // Kaohsiung Arena
   let latlng = e.latlng; // 取得定位
   let radius = 800; // 步行範圍
-  L.circle(latlng, radius).addTo(map); // 標示步行 10min 範圍方圓 800m
+  L.circle(latlng, radius, {className: 'walkscope'}).addTo(map); // 標示步行 10min 範圍方圓 800m
 
   let token = await GetAuthorizationHeader(); // 取得 token
   // call function
@@ -25,20 +25,49 @@ async function onLocationFound(e) {
 
   // 覆蓋圖層obj
   var overlayMaps = {
-    "捷運": mrtStns,
-    "輕軌": lrtStns,
-    "自行車": bikeStops, 
+     "捷運": mrtStns,
+     "輕軌": lrtStns,
+     "自行車": bikeStops, 
     "公車": busStops
   };
 
   // 圖層控制
   let layerControl = L.control.layers(null, overlayMaps, {position: 'bottomleft'}).addTo(map);
+
+  map.setZoom(13) // 設定縮放層級
+  map.on('moveend', moveend); // 地圖移動事件
 }
 
 // 定位失敗訊息
 function onLocationError(e) {
   alert(e.message);
 }
+
+// 地圖移動事件
+function moveend() {
+  setTimeout(reCircle(), 1000); // 延遲執行重新畫圓
+  // 重新畫圓
+  function reCircle() {
+    // 移除既有的圓圈
+    let el = document.querySelectorAll("path.walkscope");
+    if(el !== "") {
+      el.forEach(el => {
+        el.remove();
+      });
+    }
+    let latlng = map.getCenter(); // 取得地圖中心
+    let radius = 800; // 步行範圍
+    L.circle(latlng, radius, {className: 'walkscope'}).addTo(map); // 標示步行 10min 範圍方圓 800m
+  }
+}
+
+// 控制面板
+var info = L.control();
+info.onAdd = function (map) {
+    this._div = L.DomUtil.create('div', 'info'); // create a div with a class "info"
+    this.update();
+    return this._div;
+};
 
 
 
@@ -164,11 +193,11 @@ async function findBikeStn(token){
           }
           
           // 車站標記 icon & popup 內容
-          let str = `${stn_obj.StationName} <br>`
+          let str = `<b>${stn_obj.StationName}</b> <br>`
           str += `${stn_obj.StationAddress} <br>`
           str += `共可容納${stn_obj.BikesCapacity}台車 <br>`
-          str += `可借:${bike_obj.Rent} 可還:${bike_obj.Return} <br>`
-          str += `一般:${bike_obj.General} 電輔:${bike_obj.Electric} `
+          str += `可借: ${bike_obj.Rent} 可還: ${bike_obj.Return} <br>`
+          str += `一般: ${bike_obj.General} 電輔: ${bike_obj.Electric} `
           const grnMarker = L.AwesomeMarkers.icon({
             icon: "fa-solid fa-bicycle",
             prefix: "fa",
@@ -180,7 +209,7 @@ async function findBikeStn(token){
           // 服務狀態判定
           if(bike_obj.ServiceStatus === 2) { //暫停營運上灰底
             green.options.icon.options.markerColor = "gray";
-            str = `${stn_obj.StationName} <br>`;
+            str = `<b>${stn_obj.StationName}</b> <br>`;
             str += `${stn_obj.StationAddress} <br>`;
             str += `暫停營運`;
           }
@@ -274,8 +303,182 @@ async function findBusStn(token) {
       landmark.addLayer(e.target).addTo(map); // 單獨顯示
       e.target.openPopup(); // 打開彈出視窗
     });
+
+    // // 公車站位點擊事件
+    busStn.on("click", async function findRoutes(e) {
+      //移除既有路線
+      let el = document.querySelectorAll("path.viaroutes");
+      if(el !== "") {
+        el.forEach(el => {
+          el.remove();
+        });
+      }
+      
+      let Routes = stn_obj.RouteUIDs; //通過該站牌的所有路線
+      let str = `<h4>${stn_obj.Name} 預估到站</h4>`;
+      
+      //預估到站(N1) api 才有方向 //指定縣市、站位 //進階才有指定站位
+      let time_api = `https://tdx.transportdata.tw/api/advanced/v2/Bus/EstimatedTimeOfArrival/City/Kaohsiung/PassThrough/Station/${stn_obj.ID}?%24format=JSON`;
+      let time_data = await GetApiResponse(time_api, token);
+      if(time_data.length === 0) { alert(`查無預估到站資料`) }
+      for (let j = 0; j < time_data.length; j++) {
+        let bus_obj = {
+          PlateNumb: time_data[j].PlateNumb, //車號 //可能為空值
+          Route: time_data[j].RouteName.Zh_tw, //路線名稱
+          RouteUID: time_data[j].RouteUID, //路線 UID
+          Direction: time_data[j].Direction, //車子方向
+          EstimateTime: time_data[j].EstimateTime, // 到站時間預估(秒) //可能無資料
+          StopStatus: time_data[j].StopStatus, //車輛狀態 
+          IsLastBus: time_data[j].IsLastBus, //是否為末班車 //好像沒顯示
+          NextBusTime: time_data[j].NextBusTime, //下一班公車到達時間 //可能無資料
+          Geometry: ""// shape_data[k].Geometry
+        }
+          
+        //線型路線 api
+        let shape_api = `https://tdx.transportdata.tw/api/advanced/v2/Bus/Shape/City/Kaohsiung/PassThrough/Station/${stn_obj.ID}?%24filter=Direction%20eq%20%27${bus_obj.Direction}%27%20and%20RouteUID%20eq%20%27${bus_obj.RouteUID}%27&%24top=30&%24format=JSON`
+        let shape_data = await GetApiResponse(shape_api, token)
+        if(shape_data.length === 0) { alert(`查無線型路線資料`) }
+        bus_obj.Geometry = shape_data[0].Geometry
+        renderLine(bus_obj);
+        
+        //按點擊站位更新到站資訊
+        function infoUpd (route_obj) {
+          return function(props) {
+            str += `<div id = ${route_obj.RouteUID}_${route_obj.Direction}> ` // divID
+            str += `<b>${route_obj.Route}</b> ` // 路線名稱
+            
+
+            // 去返程(該方向指的是此車牌車輛目前所在路線的去返程方向，非指站站牌所在路線的去返程方向
+            // [0:'去程',1:'返程',2:'迴圈',255:'未知']
+            if (route_obj.Direction === 0) {str += `去程 `}
+            else if (route_obj.Direction === 1) {str += `返程 `}
+            else if (route_obj.Direction === 2) {str += `迴圈 `}
+            else if (route_obj.Direction === 255) {str += `未知 `}
+            else {str += `${route_obj.Direction} `}
+            
+
+            // 到站時間預估(秒) [當StopStatus値為2~4或PlateNumb値為-1時，EstimateTime値為null; 
+            // 當StopStatus値為1時， EstimateTime値多數為null，
+            // 僅部分路線因有固定發車時間，故EstimateTime有値; 
+            // 當StopStatus値為0時，EstimateTime有値。]
+            let estTime= convertSecondsToHours(route_obj.EstimateTime);
+            
+
+            // 下一班公車到達時間(ISO8601格式:yyyy-MM-ddTHH:mm:sszzz)
+            // 檢查NaN // 轉成 hh:ss 格式
+            function timeLocale(time) {
+              time = new Date(time)
+              let h = time.getHours();
+              let m = time.getMinutes();
+              if (Number.isNaN(h) === true) { return 0; }
+              if (Number.isNaN(m) === true) { return 0; }
+              return `${h < 10 ? "0" : ""}${h}:${m < 10 ? "0" : ""}${m}`;
+            }
+            // 轉換 yyyy-m-d
+            function checktime(time) {
+              let date = `${time.getFullYear()}-${time.getMonth()+1}-${time.getDate()}`
+              return date
+            }
+            let today = new Date(); //2023-01-01T09:55:57.230Z
+            today = checktime(today); 
+            let next = new Date(route_obj.NextBusTime) //2023-01-01T21:53:00+08:00
+            next = checktime(next);
+            
+
+            // 下班車發車時間為當天則顯示 hh:mm 
+            let nxtBustime;
+            if(today === next) { 
+              nxtBustime =  timeLocale(route_obj.NextBusTime) 
+            }
+            else { //NaN-NaN-NaN(末班車已過) or 不同天
+              nxtBustime = route_obj.NextBusTime 
+            }
+            
+            
+            // 當StopStatus値為2~4或PlateNumb値為-1時，EstimateTime値為null; 
+            // 當StopStatus値為1時， EstimateTime値多數為null，僅部分路線因有固定發車時間，故EstimateTime有値; 
+            // 當StopStatus値為0時，EstimateTime有値。
+            // 車輛狀態備註 : [0:'正常',1:'尚未發車',2:'交管不停靠',3:'末班車已過',4:'今日未營運']
+            // str += `<b>${route_obj.StopStatus}</b> `
+            if (route_obj.StopStatus === 0) {str += `<b>${estTime}後</b>到站，車號${route_obj.PlateNumb} `} // 正常
+            else if (route_obj.StopStatus === 1) {
+              if (nxtBustime === 0) {str += `尚未發車</b>`} // 下班車發車時間為NaN:NaN
+              else {str += `尚未發車，下一班<b>${nxtBustime}</b>`}
+            } // 尚未發車
+            else if (route_obj.StopStatus === 2) {str += `<b>交管不停靠</b>`} // 交管不停靠
+            else if (route_obj.StopStatus === 3) {str += `<b>末班車已過</b>`} // 末班車已過
+            else if (route_obj.StopStatus === 4) {str += `<b>今日未營運</b>`} // 今日未營運
+            else {str += `<b>${route_obj.StopStatus}</b>`}
+            
+            
+            str += `</div>`
+            this._div.innerHTML = str;
+            // document.querySelector("#table").innerHTML = str;
+            L.DomUtil.get("table").innerHTML = str;
+          } 
+        } 
+        info.update = infoUpd(bus_obj);
+        info.addTo(map);
+      }
+    }); 
   });
   return busStops
+}
+
+//渲染路線
+function renderLine(bus_obj) {
+  //wicket 套件
+  let geo = bus_obj.Geometry;
+  const wicket = new Wkt.Wkt();
+  let geojsonFeature = wicket.read(geo).toJson();  //轉換線性資料
+        
+  const lineStyle = {
+    color: "gray",
+    weight: 5,
+    opacity: 1,
+    className: 'viaroutes'
+  };
+      
+  // 隨機生成 (r, g, b) 色碼
+  let ranR = Math.floor(Math.random() * 255);
+  let ranG = Math.floor(Math.random() * 255);
+  let ranB = Math.floor(Math.random() * 255);
+  lineStyle.color = `rgb(${ranR}, ${ranG}, ${ranB})` // 用隨機生成的色碼填色
+
+  // 畫路線
+  let geojson = L.geoJSON(geojsonFeature, {
+    style: lineStyle,
+    onEachFeature: function (feature, layer) {
+      layer.bindTooltip(`${bus_obj.Route}`).openTooltip(); // 標路線名稱
+      layer.on({
+        mouseover: highlightFeature,
+        mouseout: resetHighlight,
+        click: zoomToFeature
+      });
+    }
+  })
+  .addTo(map);
+}
+
+function highlightFeature(e) {
+  var layer = e.target;
+  layer.setStyle({weight: 8,}); // 加粗
+  layer.bringToFront(); // 移至最上層
+  // info.update(layer.feature.properties);
+}
+function resetHighlight(e) {
+  e.target.setStyle({weight: 5,});
+  // info.update();
+}
+function zoomToFeature(e) {
+  map.fitBounds(e.target.getBounds()); // zoomToFeature
+}
+// 秒數轉換
+function convertSecondsToHours(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor((sec % 3600) % 60);
+  return `${h< 10 ? "0" : ""}${h}時${m < 10 ? "0" : ""}${m}分`;
 }
 
 
@@ -322,5 +525,3 @@ async function findBusStn(token) {
       return 0;
     }
   }
-  
-  
