@@ -18,6 +18,12 @@
 - 閃電：Youbike 站點有 2.0E 電輔車。
 
 ## 呼叫 API
+```
+// config.js
+const CLIENT_ID = "XXXXXXXXXX-XXXXXXXX-XXXX-XXXX";
+const CLIENT_SECRET = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX";
+export { CLIENT_ID, CLIENT_SECRET };
+```
 1. 請勿將金鑰或任何機敏資訊 push 至 Git Server，可透過`.gitignore`等方式避免。
 2. 請使用金鑰驗證得以使用完整功能。
 3. 若未成功驗證金鑰，目前僅能使用 TDX API 的【基礎】服務，且每個呼叫來源端 IP 的上限為每日 50 次。
